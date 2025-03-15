@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 import { Trigger, useDropdownStore } from "stores/dropdownStore";
 import { getOnOutsideClick, verifyAvailableSpace } from "utils/domUtils";
 import "./Dropdown.scss";
 
-export const Dropdown = () => {
+function Dropdown() {
   const { id, owner, trigger, children, left, top, width, height, buttonType, hide, clickable } = useDropdownStore();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -38,7 +38,7 @@ export const Dropdown = () => {
   }, [children, owner, trigger]);
 
   useEffect(() => {
-    const onClick = (e: MouseEvent) => onOutsideClick(e)
+    const onClick = (e: MouseEvent) => onOutsideClick(e);
     const onScroll = (e: Event) => {
       if (e.target !== dropdownRef.current) hide(id);
     };
@@ -63,6 +63,8 @@ export const Dropdown = () => {
   }
 
   return null;
-};
+}
 
 export const getTriggerEl = (trigger: Trigger) => (typeof trigger === "function" ? trigger() : trigger);
+
+export default memo(Dropdown)
