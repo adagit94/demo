@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { InputPropsBase } from "../InputTypes";
+import { InputPropsBase } from "src/components/ui/inputs/InputTypes";
 import { composeStrBool } from "src/utils/stringUtils";
 
 type InputTemplateProps<T> = InputPropsBase<T> & { children: React.ReactNode };
