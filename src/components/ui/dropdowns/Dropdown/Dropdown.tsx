@@ -1,123 +1,94 @@
-import { useCallback, useEffect, useRef } from "react"
-
-import "styles/global.scss"
-import "styles/ui/_buttons.scss"
-import "./Dropdown.scss"
-import { Trigger, useDropdownStore } from "stores/dropdownStore"
-import { verifyAvailableSpace } from "utils/domUtils/domUtils"
+import { useCallback, useEffect, useRef } from "react";
+import { Trigger, useDropdownStore } from "stores/dropdownStore";
+import { getOnOutsideClick, verifyAvailableSpace, verifyOverlap } from "utils/domUtils";
+import "./Dropdown.scss";
 
 export const Dropdown = () => {
-    const { id, owner, trigger, children, left, top, width, height, buttonType, hide, clickable } =
-        useDropdownStore()
-    const myRef = useRef<HTMLDivElement>(null)
+  const { id, owner, trigger, children, left, top, width, height, buttonType, hide, clickable } = useDropdownStore();
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const onOutsideClick = useCallback(
-        (ev: MouseEvent) => {
-            if (!id) return
+  const onOutsideClick = useCallback(getOnOutsideClick(), [])
+  const onOutsideClick = useCallback(
+    (e: MouseEvent) => {
+      if (!id) return;
 
-            const triggerRect = getTriggerEl(trigger)?.getBoundingClientRect()
+      const triggerOverlap = verifyOverlap({x: e.clientX, y: e.clientY}, () => getTriggerEl(trigger));
 
-            if (triggerRect) {
-                if (
-                    triggerRect.left === 0 &&
-                    triggerRect.right === 0 &&
-                    triggerRect.top === 0 &&
-                    triggerRect.bottom === 0
-                ) {
-                    return
-                }
+      if (
+        triggerRect &&
+        e.clientX >= triggerRect.left &&
+        e.clientX <= triggerRect.right &&
+        e.clientY >= triggerRect.top &&
+        e.clientY <= triggerRect.bottom
+      ) {
+        return;
+      }
 
-                if (
-                    ev.clientX >= triggerRect.left &&
-                    ev.clientX <= triggerRect.right &&
-                    ev.clientY >= triggerRect.top &&
-                    ev.clientY <= triggerRect.bottom
-                ) {
-                    return
-                }
-            }
+      const dropdownRect = dropdownRef.current?.getBoundingClientRect();
 
-            if (!clickable) {
-                const dropdownRect = myRef.current?.getBoundingClientRect()
-
-                if (dropdownRect) {
-                    if (
-                        dropdownRect.left === 0 &&
-                        dropdownRect.right === 0 &&
-                        dropdownRect.top === 0 &&
-                        dropdownRect.bottom === 0
-                    ) {
-                        return
-                    }
-
-                    if (
-                        ev.clientX >= dropdownRect.left &&
-                        ev.clientX <= dropdownRect.right &&
-                        ev.clientY >= dropdownRect.top &&
-                        ev.clientY <= dropdownRect.bottom
-                    ) {
-                        return
-                    }
-                }
-            }
-
-            hide(id)
-        },
-        [hide, id, trigger, clickable]
-    )
-
-    useEffect(() => {
-        if (!children || !myRef.current) return
-
-        const {
-            top: newTop,
-            left: newLeft,
-            width: newWidth,
-            height: newHeight,
-        } = verifyAvailableSpace({
-            reference: getTriggerEl(trigger) ?? undefined,
-            container: owner,
-            content: myRef.current,
-        })
-
-        useDropdownStore.setState((s) => {
-            return {
-                top: newTop !== undefined ? newTop : s.top,
-                left: newLeft !== undefined ? newLeft : s.left,
-                width: newWidth !== undefined ? newWidth : s.width,
-                height: newHeight !== undefined ? newHeight : s.height,
-            }
-        })
-    }, [children, owner, trigger])
-
-    useEffect(() => {
-        const onScroll = (e: Event) => {
-            e.target !== myRef.current && hide()
+      if (dropdownRect) {
+        if (
+          e.clientX >= dropdownRect.left &&
+          e.clientX <= dropdownRect.right &&
+          e.clientY >= dropdownRect.top &&
+          e.clientY <= dropdownRect.bottom
+        ) {
+          return;
         }
+      }
 
-        document.addEventListener("click", onOutsideClick)
-        document.addEventListener("scroll", onScroll, true)
+      hide(id);
+    },
+    [hide, id, trigger, clickable],
+  );
 
-        return () => {
-            document.removeEventListener("click", onOutsideClick)
-            document.removeEventListener("scroll", onScroll)
-        }
-    }, [hide, onOutsideClick])
+  useEffect(() => {
+    if (!children || !dropdownRef.current) return;
 
-    if (children) {
-        return (
-            <div
-                ref={myRef}
-                className={`dropdown ${buttonType}Button`}
-                style={{ left, top, width, height }}
-            >
-                {children}
-            </div>
-        )
-    }
+    const {
+      top: newTop,
+      left: newLeft,
+      width: newWidth,
+      height: newHeight,
+    } = verifyAvailableSpace({
+      reference: getTriggerEl(trigger) ?? undefined,
+      container: owner,
+      content: dropdownRef.current,
+    });
 
-    return null
-}
+    useDropdownStore.setState((s) => {
+      return {
+        top: newTop !== undefined ? newTop : s.top,
+        left: newLeft !== undefined ? newLeft : s.left,
+        width: newWidth !== undefined ? newWidth : s.width,
+        height: newHeight !== undefined ? newHeight : s.height,
+      };
+    });
+  }, [children, owner, trigger]);
 
-export const getTriggerEl = (trigger: Trigger) =>
-    typeof trigger === "function" ? trigger() : trigger
+  useEffect(() => {
+    const onScroll = (e: Event) => {
+      e.target !== dropdownRef.current && hide();
+    };
+
+    document.addEventListener("click", onOutsideClick);
+    document.addEventListener("scroll", onScroll, true);
+
+    return () => {
+      document.removeEventListener("click", onOutsideClick);
+      document.removeEventListener("scroll", onScroll);
+    };
+  }, [hide, onOutsideClick]);
+
+  if (children) {
+    return (
+      <div ref={dropdownRef} className={`dropdown ${buttonType}Button`} style={{ left, top, width, height }}>
+        {children}
+      </div>
+    );
+  }
+
+  return null;
+};
+
+export const getTriggerEl = (trigger: Trigger) => (typeof trigger === "function" ? trigger() : trigger);
