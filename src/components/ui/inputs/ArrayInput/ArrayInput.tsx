@@ -1,24 +1,19 @@
 import { LegacyRef, memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { InputPropsBase } from "components/ui/inputs/InputTypes";
 
-export type ValueMaps = {
-  display: unknown;
-  value: unknown;
-}[];
+type ArrayInputPropsBase<T, U> = InputPropsBase<T> & {
+    items: U[];
+    // autosort?: boolean;
+}
 
-export type ArrayInputProps<T, U> = InputPropsBase<T> & {
-  items: U[];
+export type ArrayInputProps<T, U> = ArrayInputPropsBase<T, U> & {
   renderItem: (item: U) => React.ReactNode;
   renderSelectedItem: (value: T, index?: number) => React.ReactNode;
   searchKey?: keyof U & string;
   multiselection?: boolean;
-  valueMaps?: ValueMaps;
-  autosort?: boolean;
 };
 
-const ArrayInput = <T, U>(props: ArrayInputProps<T, U>) => {
-  const mode = usePanelStore(({ mode }) => mode);
-
+function ArrayInput<T, U>(props: ArrayInputProps<T, U>) {
   const {
     dropdownInputRef,
     dropdownRef,
@@ -163,12 +158,10 @@ const ArrayInput = <T, U>(props: ArrayInputProps<T, U>) => {
 
 export default memo(ArrayInput) as typeof ArrayInput;
 
-type ObjectArrayInputProps<T, U> = CommonInputProps<T> & {
-  items: U[];
+type ObjectArrayInputProps<T, U> = ArrayInputPropsBase<T, U> & {
   displayKey: keyof U & string;
   valueKey: keyof U & string;
   searchKey?: keyof U & string;
-  autosort?: boolean;
 };
 
 export const ObjectArrayInput = <T, U extends Record<string, any>>(props: ObjectArrayInputProps<T, U>) => {
@@ -229,10 +222,7 @@ export const ObjectArrayInput = <T, U extends Record<string, any>>(props: Object
   );
 };
 
-type PrimitiveArrayInputProps<T> = CommonInputProps<T> & {
-  items: T[];
-  autosort?: boolean;
-};
+type PrimitiveArrayInputProps<T> = ArrayInputPropsBase<T, T>
 
 export const PrimitiveArrayInput = <T extends PrimitiveValue | undefined>(props: PrimitiveArrayInputProps<T>) => {
   const exprVal = useRootStore((s) => props.valueL && R.view(props.valueL, s));
