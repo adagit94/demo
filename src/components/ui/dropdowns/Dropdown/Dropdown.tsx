@@ -1,45 +1,16 @@
 import { useCallback, useEffect, useRef } from "react";
 import { Trigger, useDropdownStore } from "stores/dropdownStore";
-import { getOnOutsideClick, verifyAvailableSpace, verifyOverlap } from "utils/domUtils";
+import { getOnOutsideClick, verifyAvailableSpace } from "utils/domUtils";
 import "./Dropdown.scss";
 
 export const Dropdown = () => {
   const { id, owner, trigger, children, left, top, width, height, buttonType, hide, clickable } = useDropdownStore();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const onOutsideClick = useCallback(getOnOutsideClick(), [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const onOutsideClick = useCallback(
-    (e: MouseEvent) => {
-      if (!id) return;
-
-      const triggerOverlap = verifyOverlap({x: e.clientX, y: e.clientY}, () => getTriggerEl(trigger));
-
-      if (
-        triggerRect &&
-        e.clientX >= triggerRect.left &&
-        e.clientX <= triggerRect.right &&
-        e.clientY >= triggerRect.top &&
-        e.clientY <= triggerRect.bottom
-      ) {
-        return;
-      }
-
-      const dropdownRect = dropdownRef.current?.getBoundingClientRect();
-
-      if (dropdownRect) {
-        if (
-          e.clientX >= dropdownRect.left &&
-          e.clientX <= dropdownRect.right &&
-          e.clientY >= dropdownRect.top &&
-          e.clientY <= dropdownRect.bottom
-        ) {
-          return;
-        }
-      }
-
-      hide(id);
-    },
-    [hide, id, trigger, clickable],
+    getOnOutsideClick([() => getTriggerEl(trigger), () => dropdownRef.current], () => hide(id)),
+    [trigger, dropdownRef, id],
   );
 
   useEffect(() => {
@@ -67,18 +38,21 @@ export const Dropdown = () => {
   }, [children, owner, trigger]);
 
   useEffect(() => {
+    const onClick = (e: MouseEvent) => onOutsideClick(e)
     const onScroll = (e: Event) => {
-      e.target !== dropdownRef.current && hide();
+      if (e.target !== dropdownRef.current) hide(id);
     };
 
-    document.addEventListener("click", onOutsideClick);
-    document.addEventListener("scroll", onScroll, true);
+    if (id) {
+      document.addEventListener("click", onClick);
+      document.addEventListener("scroll", onScroll, true);
+    }
 
     return () => {
-      document.removeEventListener("click", onOutsideClick);
+      document.removeEventListener("click", onClick);
       document.removeEventListener("scroll", onScroll);
     };
-  }, [hide, onOutsideClick]);
+  }, [id, hide, onOutsideClick]);
 
   if (children) {
     return (
