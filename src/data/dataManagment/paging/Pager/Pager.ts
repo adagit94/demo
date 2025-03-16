@@ -1,4 +1,12 @@
-import { Advance, GetData, IPageCursor, Reset, SetData } from "data/dataManagment/CommonDataManagmentTypes";
+import {
+  Advance,
+  Exhausted,
+  GetData,
+  IDataSource,
+  IPageCursor,
+  Reset,
+  SetData,
+} from "data/dataManagment/CommonDataManagmentTypes";
 
 type PagerAdvanceOptionals = { steps: number };
 type PagerAdvanceLoader<Data> = (info: { skip: number; take: number }) => Promise<Data>;
@@ -7,10 +15,7 @@ export type PagerSettings = {
   take: number;
 };
 
-interface IPager<Data> extends IPageCursor<PagerAdvanceLoader<Data>, PagerAdvanceOptionals> {
-  getData: GetData<Data>;
-  reset: Reset;
-}
+interface IPager<Data> extends IPageCursor<PagerAdvanceLoader<Data>, PagerAdvanceOptionals>, IDataSource<Data> {}
 
 class Pager<DataItem> implements IPager<DataItem[]> {
   constructor({ take }: PagerSettings) {
@@ -48,6 +53,10 @@ class Pager<DataItem> implements IPager<DataItem[]> {
     this.step = 0;
     this.skip = 0;
     this.data = [];
+  };
+
+  public exhausted: Exhausted = () => {
+    
   };
 
   public getState = () => ({ step: this.step, skip: this.skip, take: this.take });

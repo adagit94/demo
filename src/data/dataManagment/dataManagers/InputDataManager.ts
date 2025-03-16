@@ -1,3 +1,4 @@
+import { IDataSource, IPageCursor } from "data/dataManagment/CommonDataManagmentTypes";
 import Pager, { PagerSettings } from "data/dataManagment/paging/Pager/Pager";
 import { debounce, isEqual, throttle } from "lodash";
 import { PrimitiveValue, RecordValue } from "types/CommonTypes";
@@ -6,17 +7,27 @@ export const SEARCH_ITEM_BY_VALUE_INTERVAL = 3000; // ms
 
 type DataItem = PrimitiveValue | RecordValue;
 
-export type InputDataManagerSettings = PagerSettings & {
+export type InputDataManagerSettings<
+  AdvanceLoader extends Function,
+  AdvanceOptionals extends Record<string, unknown> = Record<string, never>,
+  Pager extends IPageCursor<AdvanceLoader, AdvanceOptionals>,
+> = {
+  pager: Pager;
   paginate: boolean;
 };
 
-class InputDataManager<DataItem extends PrimitiveValue | RecordValue, Settings extends PagerSettings> {
-  constructor(settings: Settings) {
+class InputDataManager<
+  DataItem extends PrimitiveValue | RecordValue,
+  AdvanceLoader extends Function,
+  AdvanceOptionals extends Record<string, unknown>,
+  Pager extends IPageCursor<AdvanceLoader, AdvanceOptionals>,
+> implements IDataSource<DataItem[]> {
+  constructor(pager: Pager, settings: Settings) {
     this.settings = settings;
-    this.pager = new Pager(settings);
+    this.pager = pager;
   }
 
-  private pager: Pager<DataItem>;
+  private pager: Pager;
   private fulltext = "";
   private prevDataItemsChunk: DataItem[] | undefined | null = [];
   private selectedValues: unknown[] = [];

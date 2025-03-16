@@ -9,7 +9,7 @@ export type GetData<T> = () => T;
 
 export type SetData<T> = (data: T) => T;
 
-type Exhausted<State extends Record<string, unknown>> = (state: State) => boolean;
+export type Exhausted = () => boolean;
 
 export interface IPageCursor<
   AdvanceLoader extends Function,
@@ -18,8 +18,9 @@ export interface IPageCursor<
   advance: Advance<AdvanceLoader, AdvanceOptionals>;
 }
 
-export interface IDataSource<Data, State extends Record<string, unknown>> {
+export interface IDataSource<Data> {
   getData: GetData<Data>;
+  reset: Reset;
+  exhausted: Exhausted;
   //   setData: SetData<Data>;
-  exhausted: Exhausted<State>;
 }
