@@ -1,4 +1,4 @@
-import { Advance, GetData, ICursor, Reset, SetData } from "data/dataManagment/CommonDataManagmentTypes";
+import { Advance, GetData, IPageCursor, Reset, SetData } from "data/dataManagment/CommonDataManagmentTypes";
 
 type PagerAdvanceSettings = { skip: number; take: number };
 type PagerAdvanceOptionals = { steps: number };
@@ -7,7 +7,7 @@ export type PagerSettings = {
   take: number;
 };
 
-interface IPager<T> extends ICursor<PagerAdvanceSettings, PagerAdvanceOptionals> {
+interface IPager<T> extends IPageCursor<PagerAdvanceSettings, PagerAdvanceOptionals> {
   getData: GetData<T>;
   setData: SetData<T>;
   reset: Reset;

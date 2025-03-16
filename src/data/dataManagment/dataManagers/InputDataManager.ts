@@ -4,17 +4,13 @@ import { PrimitiveValue, RecordValue } from "types/CommonTypes";
 
 export const SEARCH_ITEM_BY_VALUE_INTERVAL = 3000; // ms
 
-type DataItem = PrimitiveValue | RecordValue
+type DataItem = PrimitiveValue | RecordValue;
 
-export type InputDataManagerCommonSettings = PagerSettings & {
+export type InputDataManagerSettings = PagerSettings & {
   paginate: boolean;
-  validator: 
 };
 
-export type InputDataManagerSettings<EventType> = InputDataManagerCommonSettings<EventType>;
-
-
-class InputDataManager<Settings extends PagerSettings, DataItem extends PrimitiveValue | RecordValue> {
+class InputDataManager<DataItem extends PrimitiveValue | RecordValue, Settings extends PagerSettings> {
   constructor(settings: Settings) {
     this.settings = settings;
     this.pager = new Pager(settings);
@@ -28,51 +24,6 @@ class InputDataManager<Settings extends PagerSettings, DataItem extends Primitiv
   private scrollListener: ((e: Event) => void) | undefined;
   private scrollInfo: { scrollTop: number; prevScrollTop: number | undefined } | undefined;
   protected settings: Settings;
-
-  private emitEvent = (data: DataManagerEvent) => {
-    this.settings.fireEvent({
-      data,
-      sourceId: this.settings.eventSourceId,
-      sourceName: this.settings.getName(),
-      type: this.settings.eventType,
-      token: this.token,
-    });
-  };
-
-  private constructEvent = (eventInfo: DataManagerEventInfo): DataManagerEvent => {
-    const row = this.settings.getRowData?.();
-
-    if ("value" in eventInfo) {
-      let eventData: DataManagerEvent = {
-        id: this.settings.getName(),
-        value: eventInfo.value,
-      };
-
-      if (row) eventData.row = row;
-
-      return eventData;
-    } else if ("values" in eventInfo) {
-      let eventData: DataManagerEvent = {
-        id: this.settings.getName(),
-        values: eventInfo.values,
-      };
-
-      if (row) eventData.row = row;
-
-      return eventData;
-    } else {
-      let eventData: DataManagerEvent = {
-        id: this.settings.getName(),
-        fulltext: eventInfo.fulltext,
-        skip: eventInfo.skip,
-        take: eventInfo.take,
-      };
-
-      if (row) eventData.row = row;
-
-      return eventData;
-    }
-  };
 
   private missingDataItemsForValues = () => {
     return this.selectedItems.length !== this.selectedValues.length;
@@ -161,8 +112,9 @@ class InputDataManager<Settings extends PagerSettings, DataItem extends Primitiv
     trailing: true,
   });
 
-  protected setData = (newDataItems: DataItem[] | undefined | null) => {
-    this.prevDataItemsChunk = newDataItems;
+  protected setData = (dataItems: DataItem[]) => {
+    this.prevDataItemsChunk = dataItems;
+    this.pager.setData(dataItems);
     this.verifySufficientAmount();
   };
 
@@ -182,10 +134,10 @@ class InputDataManager<Settings extends PagerSettings, DataItem extends Primitiv
       return false;
     }
 
-        this.pager.setData(data ?? []);
-        this.setData(data);
+    
+    this.setData(data);
 
-      return true;
+    return true;
   }
 
   public init = () => {
@@ -266,4 +218,4 @@ class InputDataManager<Settings extends PagerSettings, DataItem extends Primitiv
   };
 }
 
-export default InputDataManager
+export default InputDataManager;

@@ -1,6 +1,4 @@
-interface IDataSource {
-    
-}
+
 
 interface ICursorPage {
     
