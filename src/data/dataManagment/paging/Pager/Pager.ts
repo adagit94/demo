@@ -1,19 +1,18 @@
 import { Advance, GetData, IPageCursor, Reset, SetData } from "data/dataManagment/CommonDataManagmentTypes";
 
-type PagerAdvanceSettings = { skip: number; take: number };
 type PagerAdvanceOptionals = { steps: number };
+type PagerAdvanceLoader<Data> = (info: { skip: number; take: number }) => Promise<Data>;
 
 export type PagerSettings = {
   take: number;
 };
 
-interface IPager<T> extends IPageCursor<PagerAdvanceSettings, PagerAdvanceOptionals> {
-  getData: GetData<T>;
-  setData: SetData<T>;
+interface IPager<Data> extends IPageCursor<PagerAdvanceLoader<Data>, PagerAdvanceOptionals> {
+  getData: GetData<Data>;
   reset: Reset;
 }
 
-class Pager<T> implements IPager<T> {
+class Pager<DataItem> implements IPager<DataItem[]> {
   constructor({ take }: PagerSettings) {
     this.take = take;
   }
@@ -21,18 +20,9 @@ class Pager<T> implements IPager<T> {
   private step = 0;
   private skip = 0;
   private take = 0;
-  private data: T[] = [];
+  private data: DataItem[] = [];
 
-  public advance: Advance<PagerAdvanceSettings, PagerAdvanceOptionals> = (action, { steps = 1 } = {}) => {
-    this.skip = this.take * this.step;
-    this.step += steps;
-
-    action({ skip: this.skip, take: this.take * steps });
-  };
-
-  public getData: GetData<T> = () => this.data;
-
-  public setData: SetData<T> = (data: T[]) => {
+  private setData: SetData<DataItem[]> = (data: DataItem[]) => {
     const merge = this.skip > 0;
 
     this.data = merge ? [...this.data, ...data] : data;
@@ -40,15 +30,24 @@ class Pager<T> implements IPager<T> {
     return this.data;
   };
 
-  public reset: Reset = () => {
-    this.setData([]);
+  public getData: GetData<DataItem[]> = () => this.data;
 
-    this.step = 0;
-    this.skip = 0;
+  public advance: Advance<PagerAdvanceLoader<DataItem[]>, PagerAdvanceOptionals> = async (
+    loader,
+    { steps = 1 } = {},
+  ) => {
+    this.skip = this.take * this.step;
+    this.step += steps;
+
+    const batch = await loader({ skip: this.skip, take: this.take * steps });
+
+    this.setData(batch);
   };
 
-  public setStep = (step: number) => {
-    this.step = step;
+  public reset: Reset = () => {
+    this.step = 0;
+    this.skip = 0;
+    this.data = [];
   };
 
   public getState = () => ({ step: this.step, skip: this.skip, take: this.take });

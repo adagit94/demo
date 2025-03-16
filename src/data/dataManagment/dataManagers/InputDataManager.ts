@@ -63,7 +63,7 @@ class InputDataManager<DataItem extends PrimitiveValue | RecordValue, Settings e
 
     this.pager.reset();
     this.pager.advance({
-      action: () => {
+      loader: () => {
         const eventInfo =
           this.settings.eventType === "OnSelectboxDataRequest"
             ? { value: this.selectedValues[0] }
@@ -102,7 +102,7 @@ class InputDataManager<DataItem extends PrimitiveValue | RecordValue, Settings e
 
   private advancePager = () =>
     this.pager.advance({
-      action: (skip, take) => {
+      loader: (skip, take) => {
         this.emitEvent(this.constructEvent({ skip, take, fulltext: this.fulltext }));
       },
     });
@@ -134,7 +134,6 @@ class InputDataManager<DataItem extends PrimitiveValue | RecordValue, Settings e
       return false;
     }
 
-    
     this.setData(data);
 
     return true;
