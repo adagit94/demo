@@ -7,9 +7,12 @@ export const SEARCH_ITEM_BY_VALUE_INTERVAL = 3000; // ms
 
 type DataItem = PrimitiveValue | RecordValue;
 
-type Dropdown = { maxHeight: number; getElement: () => HTMLElement };
+// cause overflow of container to display scrollbar and make listening to scroll event possible to progress further with data
+// type Dropdown = { maxHeight: number; getElement: () => HTMLElement };
 
-export type InputDataManagerSettings = { dropdown: Dropdown };
+type VerifySufficientAmount = (itemsCount: number) => boolean;
+
+export type InputDataManagerOptionals = { verifySufficientAmount: VerifySufficientAmount };
 
 class InputDataManager<
   DataItem extends PrimitiveValue | RecordValue,
@@ -18,16 +21,16 @@ class InputDataManager<
   Loader extends (info: PagerAdvanceInfo) => DataItem | DataItem[] | Promise<DataItem | DataItem[]>,
 > implements IDataSource<DataItem[]>
 {
-  constructor(pager: Pager, loader: Loader, { dropdown }: InputDataManagerSettings) {
+  constructor(pager: Pager, loader: Loader, { verifySufficientAmount }: InputDataManagerSettings) {
     this.pager = pager;
     this.loader = loader;
-    this.dropdown = dropdown
+    this.verifySufficientAmount = verifySufficientAmount;
   }
 
   private pager: Pager;
   private loader: Loader;
+  private verifySufficientAmount: VerifySufficientAmount | undefined;
   private data: DataItem[] = [];
-  private dropdown: Dropdown
   private fulltext = "";
   private prevDataItemsChunk: DataItem[] | undefined | null = [];
   private selectedValues: unknown[] = [];
@@ -99,15 +102,8 @@ class InputDataManager<
     }
   };
 
-  private verifySufficientAmount = () => {
-    // cause overflow of container to display scrollbar and make listening to scroll event possible to progress further with data
-    if (
-      this.settings.paginate &&
-      this.prevDataItemsChunk?.length === this.settings.take &&
-      this.pager.getData().length <= (this.settings.minItems ?? 10)
-    ) {
-      this.loadData();
-    }
+  private hasSufficientAmount = (): boolean => {
+    return !this.pager.paged() || this.verifySufficientAmount?.(this.data.length) !== false
   };
 
   private loadData = async () => {
@@ -115,17 +111,13 @@ class InputDataManager<
       const data = await this.loader(this.pager.advance());
 
       this.data = Array.isArray(data) ? data : [data];
-      this.verifySufficientAmount();
+
+      if (!this.hasSufficientAmount()) this.loadData();
     } catch (err) {
       console.error(`Data load failed.`, err);
       this.pager.rollback();
     }
   };
-
-  private advancePagerDebounced = debounce(this.loadData, 250, {
-    leading: false,
-    trailing: true,
-  });
 
   protected setData = (dataItems: DataItem[]) => {
     this.prevDataItemsChunk = dataItems;
@@ -185,9 +177,7 @@ class InputDataManager<
     this.verifyMissingDataItemsForValues();
   }
 
-  public exhausted: Exhausted = () => {
-
-  };
+  public exhausted: Exhausted = () => {};
 }
 
 export default InputDataManager;

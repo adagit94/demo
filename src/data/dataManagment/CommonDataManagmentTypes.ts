@@ -6,6 +6,8 @@ export type Init = () => void;
 
 export type Reset = () => void;
 
+export type Paged = () => boolean;
+
 export type GetData<T> = () => T;
 
 export type SetData<T> = (data: T) => T;
@@ -16,6 +18,7 @@ export interface IPageCursor<AdvanceInfo extends Record<string, unknown>> {
   advance: Advance<AdvanceInfo>;
   rollback: Rollback;
   reset: Reset;
+  paged: Paged
 }
 
 export interface IDataSource<Data> {

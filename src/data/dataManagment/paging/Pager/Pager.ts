@@ -37,6 +37,8 @@ class Pager implements IPageCursor<AdvanceInfo> {
     this.state = this.initState();
   };
 
+  public paged = () => this.state.take > 0
+
   // public getState = () => ({ step: this.step, skip: this.skip, take: this.take });
 }
 
