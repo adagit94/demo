@@ -12,13 +12,23 @@ type DataItem = PrimitiveValue | RecordValue;
 
 type VerifySufficientAmount = (itemsCount: number) => boolean;
 
-export type InputDataManagerOptionals = { verifySufficientAmount: VerifySufficientAmount };
+export type InputDataManagerSettings<DataItem extends PrimitiveValue | RecordValue<string | number>> = {
+  verifySufficientAmount: VerifySufficientAmount;
+};
 
-class InputDataManager<
-  DataItem extends PrimitiveValue | RecordValue,
+// interface InputDataManager {
+
+// }
+
+abstract class InputDataManager<
+  DataItem extends PrimitiveValue | RecordValue<string | number>,
+  SelectedValue extends PrimitiveValue | RecordValue<string | number>,
   PagerAdvanceInfo extends Record<string, unknown>,
   Pager extends IPageCursor<PagerAdvanceInfo>,
-  Loader extends (info: PagerAdvanceInfo) => DataItem | DataItem[] | Promise<DataItem | DataItem[]>,
+  Loader extends (
+    pagerInfo: PagerAdvanceInfo,
+    search: string,
+  ) => DataItem | DataItem[] | Promise<DataItem | DataItem[]>,
 > implements IDataSource<DataItem[]>
 {
   constructor(pager: Pager, loader: Loader, { verifySufficientAmount }: InputDataManagerSettings) {
@@ -31,48 +41,22 @@ class InputDataManager<
   private loader: Loader;
   private verifySufficientAmount: VerifySufficientAmount | undefined;
   private data: DataItem[] = [];
-  private fulltext = "";
+  private searchValue = "";
   private prevDataItemsChunk: DataItem[] | undefined | null = [];
-  private selectedValues: unknown[] = [];
   private selectedItems: DataItem[] = [];
-  private scrollListener: ((e: Event) => void) | undefined;
-  private scrollInfo: { scrollTop: number; prevScrollTop: number | undefined } | undefined;
+  protected selectedValues: SelectedValue[] = [];
+
+  protected abstract getDataItemsForValues: () => DataItem[];
 
   private missingDataItemsForValues = () => {
     return this.selectedItems.length !== this.selectedValues.length;
-  };
-
-  private getDataItemsForValues = (): DataItem[] => {
-    const dataItemConf = this.settings.getDataItemConf();
-
-    if (!dataItemConf) return [];
-
-    const dataItems = this.getData();
-    let items: DataItem[] = [];
-
-    if (dataItemConf.type === DataItemType.OBJECT) {
-      for (const value of this.selectedValues) {
-        const dataItem = dataItems.find((dataItem) => value === get(dataItem, dataItemConf.value));
-
-        if (TypesUtils.isRecordObject(dataItem)) items.push(dataItem);
-      }
-    } else if (dataItemConf.type === DataItemType.PRIMITIVE) {
-      for (const value of this.selectedValues) {
-        const dataItem = dataItems.find((dataItem) => value === dataItem);
-
-        if (TypesUtils.isPrimitive(dataItem)) items.push(dataItem);
-      }
-    }
-
-    return items;
   };
 
   /**
    * @description Function emits event when data item(s) are missing for values currently set
    */
   private requestDataItemsForValues = throttle(() => {
-    this.fulltext = "";
-    this.scrollInfo = undefined;
+    this.searchValue = "";
 
     this.pager.reset();
     this.pager.advance({
@@ -89,7 +73,7 @@ class InputDataManager<
 
   private verifyMissingDataItemsForValues = () => {
     if (this.missingDataItemsForValues()) {
-      if (this.settings.paginate) {
+      if (this.pager.paged()) {
         // retrieve missing data items first and then set them in setData()
         this.requestDataItemsForValues();
       } else {
@@ -103,62 +87,40 @@ class InputDataManager<
   };
 
   private hasSufficientAmount = (): boolean => {
-    return !this.pager.paged() || this.verifySufficientAmount?.(this.data.length) !== false
+    return !this.pager.paged() || this.verifySufficientAmount?.(this.data.length) !== false;
   };
 
   private loadData = async () => {
     try {
-      const data = await this.loader(this.pager.advance());
+      const data = await this.loader(this.pager.advance(), this.searchValue);
 
       this.data = Array.isArray(data) ? data : [data];
 
       if (!this.hasSufficientAmount()) this.loadData();
     } catch (err) {
-      console.error(`Data load failed.`, err);
+      console.error(`Data load failed:`, err);
       this.pager.rollback();
     }
   };
 
-  protected setData = (dataItems: DataItem[]) => {
-    this.prevDataItemsChunk = dataItems;
-    this.pager.setData(dataItems);
-    this.verifySufficientAmount();
-  };
-
   public getData = () => {
-    const pagerData = this.pager.getData();
-
-    // filter selected items that are included in base data set and prepend only those that are missing
+    // filter out selected items that are included in base data set and prepend only those that are missing
     const prependedSelectedItems = this.selectedItems.filter(
-      (selectedItem) => !pagerData.some((item) => isEqual(item, selectedItem)),
+      (selectedItem) => !this.data.some((item) => isEqual(item, selectedItem)),
     );
 
-    return [...prependedSelectedItems, ...pagerData];
+    return [...prependedSelectedItems, ...this.data];
   };
 
-  public handleData(data: DataItem[]): boolean {
-    if (this.prevDataItemsChunk === data) {
-      return false;
-    }
-
-    this.setData(data);
-
-    return true;
-  }
-
   public init = () => {
-    this.fulltext = "";
-    this.scrollInfo = undefined;
-
+    this.searchValue = "";
     this.pager.reset();
     this.loadData();
   };
 
   public search = debounce(
-    (fulltext: string) => {
-      this.fulltext = fulltext ?? "";
-      this.scrollInfo = undefined;
-
+    (searchValue: string) => {
+      this.searchValue = searchValue;
       this.pager.reset();
       this.loadData();
     },
@@ -166,18 +128,39 @@ class InputDataManager<
     { leading: false },
   );
 
-  public setSelection = (values: unknown | unknown[]) => {
-    this.selectedValues = (Array.isArray(values) ? values : [values]).filter((x) => x !== undefined && x !== null);
+  public setSelection = (values: SelectedValue | SelectedValue[] | undefined | null) => {
+    this.selectedValues = (Array.isArray(values) ? values : [values]).filter((v) => v !== undefined && v !== null);
     this.selectedItems = this.getDataItemsForValues();
   };
 
-  public sync(values: PrimitiveValue | PrimitiveValue[], data: DataItem[]) {
-    this.handleData(data);
+  public sync(values: SelectedValue | SelectedValue[] | undefined | null) {
     this.setSelection(values);
     this.verifyMissingDataItemsForValues();
   }
 
   public exhausted: Exhausted = () => {};
+}
+
+export class PrimitiveInputDataManager<
+  PagerAdvanceInfo extends Record<string, unknown>,
+  Pager extends IPageCursor<PagerAdvanceInfo>,
+  Loader extends (
+    pagerInfo: PagerAdvanceInfo,
+    search: string,
+  ) => PrimitiveValue | PrimitiveValue[] | Promise<PrimitiveValue | PrimitiveValue[]>,
+> extends InputDataManager<PrimitiveValue, PrimitiveValue, PagerAdvanceInfo, Pager, Loader> {
+  protected override getDataItemsForValues = (): PrimitiveValue[] => {
+    const data = this.getData();
+    let dataItems: PrimitiveValue[] = [];
+
+    for (const value of this.selectedValues) {
+      const dataItem = data.find((item) => value === item);
+
+      if (dataItem) dataItems.push(dataItem);
+    }
+
+    return dataItems;
+  };
 }
 
 export default InputDataManager;
