@@ -20,7 +20,8 @@ export interface IPageCursor<AdvanceInfo extends Record<string, unknown>> {
 
 export interface IDataSource<Data> {
   getData: GetData<Data>;
-  setData: SetData<Data>;
+  // setData: SetData<Data>;
   init: Init;
   exhausted: Exhausted;
+  paged: boolean
 }

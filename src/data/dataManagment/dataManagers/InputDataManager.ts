@@ -7,7 +7,9 @@ export const SEARCH_ITEM_BY_VALUE_INTERVAL = 3000; // ms
 
 type DataItem = PrimitiveValue | RecordValue;
 
-export type InputDataManagerSettings = {};
+type Dropdown = { maxHeight: number; getElement: () => HTMLElement };
+
+export type InputDataManagerSettings = { dropdown: Dropdown };
 
 class InputDataManager<
   DataItem extends PrimitiveValue | RecordValue,
@@ -16,14 +18,16 @@ class InputDataManager<
   Loader extends (info: PagerAdvanceInfo) => DataItem | DataItem[] | Promise<DataItem | DataItem[]>,
 > implements IDataSource<DataItem[]>
 {
-  constructor(pager: Pager, loader: Loader, {}: InputDataManagerSettings) {
+  constructor(pager: Pager, loader: Loader, { dropdown }: InputDataManagerSettings) {
     this.pager = pager;
     this.loader = loader;
+    this.dropdown = dropdown
   }
 
   private pager: Pager;
   private loader: Loader;
-  private data: DataItem[] = []
+  private data: DataItem[] = [];
+  private dropdown: Dropdown
   private fulltext = "";
   private prevDataItemsChunk: DataItem[] | undefined | null = [];
   private selectedValues: unknown[] = [];
@@ -102,17 +106,23 @@ class InputDataManager<
       this.prevDataItemsChunk?.length === this.settings.take &&
       this.pager.getData().length <= (this.settings.minItems ?? 10)
     ) {
-      this.advancePager();
+      this.loadData();
     }
   };
 
-  private advancePager = async () => {
+  private loadData = async () => {
     try {
-      this.data = await this.loader(this.pager.advance());
-    } catch (err) {}
+      const data = await this.loader(this.pager.advance());
+
+      this.data = Array.isArray(data) ? data : [data];
+      this.verifySufficientAmount();
+    } catch (err) {
+      console.error(`Data load failed.`, err);
+      this.pager.rollback();
+    }
   };
 
-  private advancePagerDebounced = debounce(this.advancePager, 250, {
+  private advancePagerDebounced = debounce(this.loadData, 250, {
     leading: false,
     trailing: true,
   });
@@ -149,7 +159,7 @@ class InputDataManager<
     this.scrollInfo = undefined;
 
     this.pager.reset();
-    this.advancePager();
+    this.loadData();
   };
 
   public search = debounce(
@@ -158,7 +168,7 @@ class InputDataManager<
       this.scrollInfo = undefined;
 
       this.pager.reset();
-      this.advancePager();
+      this.loadData();
     },
     250,
     { leading: false },
@@ -175,52 +185,8 @@ class InputDataManager<
     this.verifyMissingDataItemsForValues();
   }
 
-  public exhausted: Exhausted = () => {};
+  public exhausted: Exhausted = () => {
 
-  public attachScrollListener = (dropdownIdClass: string) => {
-    const container = document.querySelector(`.${dropdownIdClass} .dx-overlay-content`) as HTMLDivElement | null;
-
-    if (!container) return;
-
-    const listener = (this.scrollListener = (_e: Event) => {
-      const scrollbarContainer = container?.querySelector(".dx-scrollable-scrollbar");
-      const scrollbarContainerRect = scrollbarContainer?.getBoundingClientRect();
-
-      const scrollbarContent = scrollbarContainer?.querySelector("div:first-child");
-      const scrollbarContentRect = scrollbarContent?.getBoundingClientRect();
-
-      const scrollable = container?.querySelector(".dx-scrollable-container") as HTMLDivElement | null;
-
-      if (scrollable) {
-        this.scrollInfo = {
-          scrollTop: scrollable.scrollTop,
-          prevScrollTop: this.scrollInfo?.scrollTop,
-        };
-      }
-
-      if (
-        scrollbarContainerRect &&
-        scrollbarContentRect &&
-        this.prevDataItemsChunk &&
-        this.prevDataItemsChunk.length >= this.settings.take &&
-        Math.ceil(scrollbarContentRect.bottom) >= Math.floor(scrollbarContainerRect.bottom)
-      ) {
-        this.advancePagerDebounced();
-      }
-    });
-
-    container.addEventListener("scroll", listener, true);
-  };
-
-  public detachScrollListener = (dropdownIdClass: string) => {
-    if (!this.scrollListener) return;
-
-    const container = document.querySelector(`.${dropdownIdClass} .dx-overlay-content`) as HTMLDivElement | null;
-
-    if (!container) return;
-
-    container.removeEventListener("scroll", this.scrollListener, true);
-    this.scrollListener = undefined;
   };
 }
 
