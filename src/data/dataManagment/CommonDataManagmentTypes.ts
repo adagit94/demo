@@ -1,7 +1,4 @@
-export type Advance<Loader extends Function, Optionals extends Record<string, unknown> = Record<string, never>> = (
-  loader: Loader,
-  optionals?: Partial<Optionals>,
-) => void | Promise<void>;
+export type Advance<Settings extends Record<string, unknown>, Args extends unknown[] = []> = (...args: Args) => Settings;
 
 export type Reset = () => void;
 
@@ -11,16 +8,13 @@ export type SetData<T> = (data: T) => T;
 
 export type Exhausted = () => boolean;
 
-export interface IPageCursor<
-  AdvanceLoader extends Function,
-  AdvanceOptionals extends Record<string, unknown> = Record<string, never>,
-> {
-  advance: Advance<AdvanceLoader, AdvanceOptionals>;
+export interface IPageCursor<Settings extends Record<string, unknown>> {
+  advance: Advance<Settings>;
 }
 
 export interface IDataSource<Data> {
   getData: GetData<Data>;
+  setData: SetData<Data>;
   reset: Reset;
   exhausted: Exhausted;
-  //   setData: SetData<Data>;
 }

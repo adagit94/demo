@@ -181,6 +181,10 @@ class InputDataManager<
     this.verifyMissingDataItemsForValues();
   }
 
+  public exhausted: Exhausted = () => {
+    
+  };
+
   public attachScrollListener = (dropdownIdClass: string) => {
     const container = document.querySelector(`.${dropdownIdClass} .dx-overlay-content`) as HTMLDivElement | null;
 
