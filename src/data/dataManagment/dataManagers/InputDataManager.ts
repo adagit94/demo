@@ -11,15 +11,19 @@ export type InputDataManagerSettings = {};
 
 class InputDataManager<
   DataItem extends PrimitiveValue | RecordValue,
-  PagerSettings extends Record<string, unknown>,
-  Pager extends IPageCursor<PagerSettings>,
+  PagerAdvanceInfo extends Record<string, unknown>,
+  Pager extends IPageCursor<PagerAdvanceInfo>,
+  Loader extends (info: PagerAdvanceInfo) => DataItem | DataItem[] | Promise<DataItem | DataItem[]>,
 > implements IDataSource<DataItem[]>
 {
-  constructor(pager: Pager, {}: InputDataManagerSettings) {
+  constructor(pager: Pager, loader: Loader, {}: InputDataManagerSettings) {
     this.pager = pager;
+    this.loader = loader;
   }
 
   private pager: Pager;
+  private loader: Loader;
+  private data: DataItem[] = []
   private fulltext = "";
   private prevDataItemsChunk: DataItem[] | undefined | null = [];
   private selectedValues: unknown[] = [];
@@ -102,12 +106,11 @@ class InputDataManager<
     }
   };
 
-  private advancePager = () =>
-    this.pager.advance({
-      loader: (skip, take) => {
-        this.emitEvent(this.constructEvent({ skip, take, fulltext: this.fulltext }));
-      },
-    });
+  private advancePager = async () => {
+    try {
+      this.data = await this.loader(this.pager.advance());
+    } catch (err) {}
+  };
 
   private advancePagerDebounced = debounce(this.advancePager, 250, {
     leading: false,

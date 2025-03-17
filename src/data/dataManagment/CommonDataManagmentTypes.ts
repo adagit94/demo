@@ -2,6 +2,8 @@ export type Advance<Info extends Record<string, unknown>, Args extends unknown[]
 
 export type Rollback = () => void;
 
+export type Init = () => void;
+
 export type Reset = () => void;
 
 export type GetData<T> = () => T;
@@ -19,6 +21,6 @@ export interface IPageCursor<AdvanceInfo extends Record<string, unknown>> {
 export interface IDataSource<Data> {
   getData: GetData<Data>;
   setData: SetData<Data>;
-  reset: Reset;
+  init: Init;
   exhausted: Exhausted;
 }
