@@ -1,50 +1,44 @@
-import { IDataSource, IPageCursor } from "data/dataManagment/CommonDataManagmentTypes";
-import Pager, { PagerSettings } from "data/dataManagment/paging/Pager/Pager";
-import { debounce, isEqual, throttle } from "lodash";
+import { DataSourceState, IDataSource, IPageCursor } from "data/dataManagment/DataManagmentTypes";
+import { debounce, get, isEqual } from "lodash";
 import { PrimitiveValue, RecordValue } from "types/CommonTypes";
-
-export const SEARCH_ITEM_BY_VALUE_INTERVAL = 3000; // ms
 
 type DataItem = PrimitiveValue | RecordValue;
 
-// cause overflow of container to display scrollbar and make listening to scroll event possible to progress further with data
-// type Dropdown = { maxHeight: number; getElement: () => HTMLElement };
+type InputDataManagerState = DataSourceState;
 
-type VerifySufficientAmount = (itemsCount: number) => boolean;
+type LoaderOptionals = Partial<{ search: string; selectedValues: DataItem[] }>;
 
-export type InputDataManagerSettings<DataItem extends PrimitiveValue | RecordValue<string | number>> = {
-  verifySufficientAmount: VerifySufficientAmount;
+type LoaderReturn<DataItem extends PrimitiveValue | RecordValue<string | number>> = InputDataManagerState & {
+  data: DataItem | DataItem[];
 };
 
-// interface InputDataManager {
-
-// }
-
 abstract class InputDataManager<
+  Settings extends PrimitiveInputDataManagerSettings | RecordInputDataManagerSettings,
   DataItem extends PrimitiveValue | RecordValue<string | number>,
   SelectedValue extends PrimitiveValue | RecordValue<string | number>,
+  PagerState extends Record<string, unknown>,
   PagerAdvanceInfo extends Record<string, unknown>,
-  Pager extends IPageCursor<PagerAdvanceInfo>,
+  Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
   Loader extends (
     pagerInfo: PagerAdvanceInfo,
-    search: string,
-  ) => DataItem | DataItem[] | Promise<DataItem | DataItem[]>,
-> implements IDataSource<DataItem[]>
+    currentData: Readonly<DataItem[]>,
+    optionals?: LoaderOptionals,
+  ) => LoaderReturn<DataItem> | Promise<LoaderReturn<DataItem>>,
+> implements IDataSource<DataItem[], InputDataManagerState>
 {
-  constructor(pager: Pager, loader: Loader, { verifySufficientAmount }: InputDataManagerSettings) {
+  constructor(pager: Pager, loader: Loader, settings: Settings) {
     this.pager = pager;
     this.loader = loader;
-    this.verifySufficientAmount = verifySufficientAmount;
+    this.settings = settings;
   }
 
   private pager: Pager;
   private loader: Loader;
-  private verifySufficientAmount: VerifySufficientAmount | undefined;
+  private state: InputDataManagerState = { exhausted: false, sufficientAmount: false };
   private data: DataItem[] = [];
-  private searchValue = "";
-  private prevDataItemsChunk: DataItem[] | undefined | null = [];
   private selectedItems: DataItem[] = [];
   protected selectedValues: SelectedValue[] = [];
+  protected settings: Settings;
 
   protected abstract getDataItemsForValues: () => DataItem[];
 
@@ -53,50 +47,24 @@ abstract class InputDataManager<
   };
 
   /**
-   * @description Function emits event when data item(s) are missing for values currently set
+   * @description Request missing data item(s) for values currently set.
    */
-  private requestDataItemsForValues = throttle(() => {
-    this.searchValue = "";
-
+  private requestDataItemsForValues = () => {
     this.pager.reset();
-    this.pager.advance({
-      loader: () => {
-        const eventInfo =
-          this.settings.eventType === "OnSelectboxDataRequest"
-            ? { value: this.selectedValues[0] }
-            : { values: this.selectedValues };
-
-        this.emitEvent(this.constructEvent(eventInfo));
-      },
-    });
-  }, SEARCH_ITEM_BY_VALUE_INTERVAL);
-
-  private verifyMissingDataItemsForValues = () => {
-    if (this.missingDataItemsForValues()) {
-      if (this.pager.paged()) {
-        // retrieve missing data items first and then set them in setData()
-        this.requestDataItemsForValues();
-      } else {
-        const dataItemConf = this.settings.getDataItemConf();
-
-        if (dataItemConf?.type === DataItemType.PRIMITIVE && this.selectedValues.every(TypesUtils.isPrimitive)) {
-          this.selectedItems = [...this.selectedValues];
-        }
-      }
-    }
+    this.loadData({ selectedValues: this.selectedValues });
   };
 
-  private hasSufficientAmount = (): boolean => {
-    return !this.pager.paged() || this.verifySufficientAmount?.(this.data.length) !== false;
-  };
-
-  private loadData = async () => {
+  private loadData = async (optionals?: LoaderOptionals) => {
     try {
-      const data = await this.loader(this.pager.advance(), this.searchValue);
+      const { data, exhausted, sufficientAmount } = await this.loader(this.pager.advance(), this.getData(), optionals);
 
       this.data = Array.isArray(data) ? data : [data];
+      this.state = {
+        exhausted,
+        sufficientAmount,
+      };
 
-      if (!this.hasSufficientAmount()) this.loadData();
+      if (!sufficientAmount) this.loadData();
     } catch (err) {
       console.error(`Data load failed:`, err);
       this.pager.rollback();
@@ -113,16 +81,14 @@ abstract class InputDataManager<
   };
 
   public init = () => {
-    this.searchValue = "";
     this.pager.reset();
     this.loadData();
   };
 
   public search = debounce(
-    (searchValue: string) => {
-      this.searchValue = searchValue;
+    (search: string) => {
       this.pager.reset();
-      this.loadData();
+      this.loadData({ search });
     },
     250,
     { leading: false },
@@ -135,20 +101,35 @@ abstract class InputDataManager<
 
   public sync(values: SelectedValue | SelectedValue[] | undefined | null) {
     this.setSelection(values);
-    this.verifyMissingDataItemsForValues();
+
+    if (this.missingDataItemsForValues()) {
+      this.requestDataItemsForValues();
+    }
   }
 
-  public exhausted: Exhausted = () => {};
+  public getState = () => ({ ...this.state });
 }
 
+type PrimitiveInputDataManagerSettings = Record<string, never>;
+
 export class PrimitiveInputDataManager<
+  PagerState extends Record<string, unknown>,
   PagerAdvanceInfo extends Record<string, unknown>,
-  Pager extends IPageCursor<PagerAdvanceInfo>,
+  Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
   Loader extends (
     pagerInfo: PagerAdvanceInfo,
-    search: string,
-  ) => PrimitiveValue | PrimitiveValue[] | Promise<PrimitiveValue | PrimitiveValue[]>,
-> extends InputDataManager<PrimitiveValue, PrimitiveValue, PagerAdvanceInfo, Pager, Loader> {
+    currentData: Readonly<DataItem[]>,
+    optionals?: LoaderOptionals,
+  ) => LoaderReturn<PrimitiveValue> | Promise<LoaderReturn<PrimitiveValue>>,
+> extends InputDataManager<
+  PrimitiveInputDataManagerSettings,
+  PrimitiveValue,
+  PrimitiveValue,
+  PagerState,
+  PagerAdvanceInfo,
+  Pager,
+  Loader
+> {
   protected override getDataItemsForValues = (): PrimitiveValue[] => {
     const data = this.getData();
     let dataItems: PrimitiveValue[] = [];
@@ -163,4 +144,46 @@ export class PrimitiveInputDataManager<
   };
 }
 
-export default InputDataManager;
+type RecordInputDataManagerSettings = {
+  valueKey?: string;
+};
+
+export class RecordInputDataManager<
+  PagerState extends Record<string, unknown>,
+  PagerAdvanceInfo extends Record<string, unknown>,
+  Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
+  Loader extends (
+    pagerInfo: PagerAdvanceInfo,
+    currentData: Readonly<DataItem[]>,
+    optionals?: LoaderOptionals,
+  ) => LoaderReturn<RecordValue<string | number>> | Promise<LoaderReturn<RecordValue<string | number>>>,
+> extends InputDataManager<
+  RecordInputDataManagerSettings,
+  RecordValue<string | number>,
+  RecordValue<string | number> | PrimitiveValue,
+  PagerState,
+  PagerAdvanceInfo,
+  Pager,
+  Loader
+> {
+  protected override getDataItemsForValues = (): RecordValue<string | number>[] => {
+    const data = this.getData();
+    let dataItems: RecordValue<string | number>[] = [];
+
+    for (const value of this.selectedValues) {
+      const dataItem = data.find((item) => {
+        const { valueKey } = this.settings;
+
+        if (valueKey) {
+          return get(item, valueKey) === value;
+        }
+
+        return isEqual(item, value);
+      });
+
+      if (dataItem) dataItems.push(dataItem);
+    }
+
+    return dataItems;
+  };
+}

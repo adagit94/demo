@@ -1,10 +1,10 @@
-import { IPageCursor, Reset } from "data/dataManagment/CommonDataManagmentTypes";
+import { IPageCursor } from "data/dataManagment/DataManagmentTypes";
 
 type AdvanceInfo = { skip: number; take: number; merge: boolean };
 type PagerState = { step: number; skip: number; take: number };
 type PagerSettings = Partial<Pick<PagerState, "take">>;
 
-class Pager implements IPageCursor<AdvanceInfo> {
+class Pager implements IPageCursor<PagerState, AdvanceInfo> {
   constructor(settings: PagerSettings = {}) {
     this.settings = settings;
     this.state = this.initState();
@@ -32,14 +32,12 @@ class Pager implements IPageCursor<AdvanceInfo> {
     this.prevState = undefined;
   };
 
-  public reset: Reset = () => {
+  public reset = () => {
     this.prevState = undefined;
     this.state = this.initState();
   };
 
-  public paged = () => this.state.take > 0
-
-  // public getState = () => ({ step: this.step, skip: this.skip, take: this.take });
+  public getState = () => ({ ...this.state });
 }
 
 export default Pager;
