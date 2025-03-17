@@ -1,52 +1,43 @@
-import {
-  Advance,
-  Exhausted,
-  GetData,
-  IDataSource,
-  IPageCursor,
-  Reset,
-  SetData,
-} from "data/dataManagment/CommonDataManagmentTypes";
+import { IPageCursor, Reset } from "data/dataManagment/CommonDataManagmentTypes";
 
-type PagerAdvanceOptionals = { steps: number };
-type PagerSettings = { skip: number; take: number }
+type AdvanceInfo = { skip: number; take: number; merge: boolean };
+type PagerState = { step: number; skip: number; take: number };
+type PagerSettings = Partial<Pick<PagerState, "take">>;
 
-class Pager<DataItem> implements IPageCursor<PagerSettings> {
-  constructor({ take }: Partial<Pick<PagerSettings, "take">> = {}) {
-    this.take = take ?? 0;
+class Pager implements IPageCursor<AdvanceInfo> {
+  constructor(settings: PagerSettings = {}) {
+    this.settings = settings;
+    this.state = this.initState();
   }
 
-  private step = 0;
-  private skip = 0;
-  private take = 0;
-  private data: DataItem[] = [];
+  private settings: PagerSettings;
+  private state: PagerState;
+  private prevState: PagerState | undefined;
 
-  private setData: SetData<DataItem[]> = (data: DataItem[]) => {
-    const merge = this.skip > 0;
+  private initState = () => ({ step: 0, skip: 0, take: this.settings.take ?? 0 });
 
-    this.data = merge ? [...this.data, ...data] : data;
+  public advance = ({ steps = 1 } = {}) => {
+    this.prevState = this.state;
+    this.state = {
+      ...this.state,
+      skip: this.state.take * this.state.step,
+      step: this.state.step + steps,
+    };
 
-    return this.data;
+    return { skip: this.state.skip, take: this.state.take * steps, merge: this.state.skip > 0 };
   };
 
-  public getData: GetData<DataItem[]> = () => this.data;
-
-  public advance = (
-    { steps = 1 } = {},
-  ) => {
-    this.skip = this.take * this.step;
-    this.step += steps;
-
-    return { skip: this.skip, take: this.take * steps };
+  public rollback = () => {
+    this.state = this.prevState ?? this.state;
+    this.prevState = undefined;
   };
 
   public reset: Reset = () => {
-    this.step = 0;
-    this.skip = 0;
-    this.data = [];
+    this.prevState = undefined;
+    this.state = this.initState();
   };
 
-  public getState = () => ({ step: this.step, skip: this.skip, take: this.take });
+  // public getState = () => ({ step: this.step, skip: this.skip, take: this.take });
 }
 
 export default Pager;

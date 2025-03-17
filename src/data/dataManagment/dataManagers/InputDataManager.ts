@@ -7,23 +7,15 @@ export const SEARCH_ITEM_BY_VALUE_INTERVAL = 3000; // ms
 
 type DataItem = PrimitiveValue | RecordValue;
 
-export type InputDataManagerSettings<
-  AdvanceLoader extends Function,
-  AdvanceOptionals extends Record<string, unknown> = Record<string, never>,
-  Pager extends IPageCursor<AdvanceLoader, AdvanceOptionals>,
-> = {
-  pager: Pager;
-  paginate: boolean;
-};
+export type InputDataManagerSettings = {};
 
 class InputDataManager<
   DataItem extends PrimitiveValue | RecordValue,
-  AdvanceLoader extends Function,
-  AdvanceOptionals extends Record<string, unknown>,
-  Pager extends IPageCursor<AdvanceLoader, AdvanceOptionals>,
-> implements IDataSource<DataItem[]> {
-  constructor(pager: Pager, settings: Settings) {
-    this.settings = settings;
+  PagerSettings extends Record<string, unknown>,
+  Pager extends IPageCursor<PagerSettings>,
+> implements IDataSource<DataItem[]>
+{
+  constructor(pager: Pager, {}: InputDataManagerSettings) {
     this.pager = pager;
   }
 
@@ -34,7 +26,6 @@ class InputDataManager<
   private selectedItems: DataItem[] = [];
   private scrollListener: ((e: Event) => void) | undefined;
   private scrollInfo: { scrollTop: number; prevScrollTop: number | undefined } | undefined;
-  protected settings: Settings;
 
   private missingDataItemsForValues = () => {
     return this.selectedItems.length !== this.selectedValues.length;
@@ -181,9 +172,7 @@ class InputDataManager<
     this.verifyMissingDataItemsForValues();
   }
 
-  public exhausted: Exhausted = () => {
-    
-  };
+  public exhausted: Exhausted = () => {};
 
   public attachScrollListener = (dropdownIdClass: string) => {
     const container = document.querySelector(`.${dropdownIdClass} .dx-overlay-content`) as HTMLDivElement | null;
