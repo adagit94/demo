@@ -10,7 +10,9 @@ type Reset = () => void;
 
 type GetData<T> = ImmutableGetter<T>;
 
-export type LoadData<T, U extends DataSourceState<T>, V extends unknown[] = []> = VariadicFunction<U | Promise<U>, V>;
+type SetData<T> = () => T;
+
+export type LoadData<T, U extends unknown[] = []> = VariadicFunction<T | Promise<T>, U>;
 
 export type DataSourceState<T> = { data: Readonly<T>; sufficientAmount: boolean; exhausted: boolean };
 
@@ -21,13 +23,13 @@ export interface IPageCursor<State extends Record<string, unknown>, AdvanceInfo 
   reset: Reset;
 }
 
-export interface IDataSource<
-  Data,
-  State extends DataSourceState<Data>,
-  Load extends LoadData<Data, State>,
-> {
+export interface IDataLoader<T> {
+  load: LoadData<T>;
+}
+
+export interface IDataSource<Data, State extends DataSourceState<Data>> extends IDataLoader<State> {
   getState: GetState<State>;
   getData: GetData<Data>;
-  load: Load;
+  setData: SetData<Data>;
   reset: Reset;
 }
