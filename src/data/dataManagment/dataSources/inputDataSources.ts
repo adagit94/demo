@@ -1,28 +1,23 @@
-import { DataSourceState, IDataSource, IPageCursor } from "data/dataManagment/DataManagmentTypes";
+import { DataSourceState, IDataLoader, IDataSource, IPageCursor } from "data/dataManagment/DataManagmentTypes";
 import { debounce, get, isEqual } from "lodash";
-import { PrimitiveValue, RecordValue } from "types/CommonTypes";
+import { PrimitiveValue } from "types/CommonTypes";
 
+type RecordValue = Record<string | number, unknown>;
 type DataItem = PrimitiveValue | RecordValue;
 
-type InputDataManagerState<DataItem extends PrimitiveValue | RecordValue<string | number>> = DataSourceState<
-  DataItem[]
->;
+type InputDataManagerState<DataItem extends PrimitiveValue | RecordValue> = DataSourceState<DataItem[]>;
 
 type LoaderOptionals = Partial<{ search: string; selectedValues: DataItem[] }>;
 
-abstract class InputDataManager<
-  Settings extends PrimitiveInputDataManagerSettings | RecordInputDataManagerSettings,
-  DataItem extends PrimitiveValue | RecordValue<string | number>,
-  SelectedValue extends PrimitiveValue | RecordValue<string | number>,
+abstract class InputDataSource<
+  Settings extends PrimitiveInputDataSourceSettings | ObjectInputDataSourceSettings,
+  DataItem extends PrimitiveValue | RecordValue,
+  SelectedValue extends PrimitiveValue | RecordValue,
   PagerState extends Record<string, unknown>,
   PagerAdvanceInfo extends Record<string, unknown>,
   Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
-> implements
-    IDataSource<
-      DataItem[],
-      DataSourceState<DataItem[]>,
-      (pagerInfo: PagerAdvanceInfo, optionals?: LoaderOptionals) => DataSourceState<DataItem[]>
-    >
+  Loader extends IDataLoader<DataSourceState<DataItem[]>, [PagerAdvanceInfo, LoaderOptionals]>,
+> implements IDataSource<DataItem[], DataSourceState<DataItem[]>>
 {
   constructor(pager: Pager, loader: Loader, settings: Settings) {
     this.pager = pager;
@@ -32,7 +27,7 @@ abstract class InputDataManager<
 
   private pager: Pager;
   private loader: Loader;
-  private state: InputDataManagerState = { exhausted: false, sufficientAmount: false };
+  private state: InputDataManagerState<DataItem> = { data: [], exhausted: false, sufficientAmount: false };
   private data: DataItem[] = [];
   private selectedItems: DataItem[] = [];
   protected selectedValues: SelectedValue[] = [];
@@ -54,10 +49,10 @@ abstract class InputDataManager<
 
   private loadData = async (optionals?: LoaderOptionals) => {
     try {
-      const { data, exhausted, sufficientAmount } = await this.loader(this.pager.advance(), this.getData(), optionals);
+      const { data, exhausted, sufficientAmount } = await this.loader.load(this.pager.advance(), this.getData(), optionals);
 
-      this.data = Array.isArray(data) ? data : [data];
       this.state = {
+        data: Array.isArray(data) ? data : [data],
         exhausted,
         sufficientAmount,
       };
@@ -108,19 +103,15 @@ abstract class InputDataManager<
   public getState = () => ({ ...this.state });
 }
 
-type PrimitiveInputDataManagerSettings = Record<string, never>;
+type PrimitiveInputDataSourceSettings = Record<string, never>;
 
-export class PrimitiveInputDataManager<
+export class PrimitiveInputDataSource<
   PagerState extends Record<string, unknown>,
   PagerAdvanceInfo extends Record<string, unknown>,
   Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
-  Loader extends (
-    pagerInfo: PagerAdvanceInfo,
-    currentData: Readonly<DataItem[]>,
-    optionals?: LoaderOptionals,
-  ) => LoaderReturn<PrimitiveValue> | Promise<LoaderReturn<PrimitiveValue>>,
-> extends InputDataManager<
-  PrimitiveInputDataManagerSettings,
+  Loader extends IDataLoader<DataSourceState<PrimitiveValue[]>, [PagerAdvanceInfo, LoaderOptionals]>,
+> extends InputDataSource<
+  PrimitiveInputDataSourceSettings,
   PrimitiveValue,
   PrimitiveValue,
   PagerState,
@@ -142,31 +133,27 @@ export class PrimitiveInputDataManager<
   };
 }
 
-type RecordInputDataManagerSettings = {
+type ObjectInputDataSourceSettings = {
   valueKey?: string;
 };
 
-export class RecordInputDataManager<
+export class ObjectInputDataSource<
   PagerState extends Record<string, unknown>,
   PagerAdvanceInfo extends Record<string, unknown>,
   Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
-  Loader extends (
-    pagerInfo: PagerAdvanceInfo,
-    currentData: Readonly<DataItem[]>,
-    optionals?: LoaderOptionals,
-  ) => LoaderReturn<RecordValue<string | number>> | Promise<LoaderReturn<RecordValue<string | number>>>,
-> extends InputDataManager<
-  RecordInputDataManagerSettings,
-  RecordValue<string | number>,
-  RecordValue<string | number> | PrimitiveValue,
+  Loader extends IDataLoader<DataSourceState<RecordValue[]>, [PagerAdvanceInfo, LoaderOptionals]>,
+> extends InputDataSource<
+  ObjectInputDataSourceSettings,
+  RecordValue,
+  RecordValue | PrimitiveValue,
   PagerState,
   PagerAdvanceInfo,
   Pager,
   Loader
 > {
-  protected override getDataItemsForValues = (): RecordValue<string | number>[] => {
+  protected override getDataItemsForValues = (): RecordValue[] => {
     const data = this.getData();
-    let dataItems: RecordValue<string | number>[] = [];
+    let dataItems: RecordValue[] = [];
 
     for (const value of this.selectedValues) {
       const dataItem = data.find((item) => {
