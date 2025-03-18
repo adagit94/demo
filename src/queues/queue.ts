@@ -5,19 +5,11 @@ export type QueueTask = Partial<{
   privileged: boolean;
 }>;
 
-type QueueState = {
-  pending: boolean;
-};
-
-type QueueParams<T extends QueueTask> = {
-  executeTask: ExecuteTask<T>;
-};
-
 type GetQueue<T extends QueueTask> = () => T[];
 type SetQueue<T extends QueueTask> = (newQueue: T[]) => void;
 type GetTask<T extends QueueTask> = (f: (task: T) => boolean) => T | undefined;
-type SetTask<T extends QueueTask> = (task: T, i?: number) => T;
-type ExecuteTask<T extends QueueTask> = (f: (task: T) => boolean | Promise<boolean>) => void;
+type SetTask<T extends QueueTask> = (task: T, i?: number) => void;
+type ExecuteTask<T extends QueueTask> = (task: T) => void | Promise<void>;
 
 export interface Queue<T extends QueueTask> {
   getQueue: GetQueue<T>;
@@ -26,32 +18,40 @@ export interface Queue<T extends QueueTask> {
   setTask: SetTask<T>;
 }
 
+type QueueParams<T extends QueueTask> = {
+  executeTask: ExecuteTask<T>;
+};
+
 export const createQueue = <T extends QueueTask>({ executeTask }: QueueParams<T>): Queue<T> => {
   let queue: T[] = [];
-  let inProgressTask: T | undefined
+  let taskInProgress: T | undefined;
 
   const execute = async () => {
-    const task = queue.shift()
+    if (taskInProgress) return;
 
-    if (task === undefined) return
-    
-  }
-  
+    const task = queue[0];
+
+    if (task === undefined) return;
+
+    queue = queue.slice(1);
+    taskInProgress = task;
+
+    await executeTask(task);
+    taskInProgress = undefined;
+    execute();
+  };
+
   const getQueue: GetQueue<T> = () => [...queue];
 
   const setQueue: SetQueue<T> = (newQueue) => {
-    queue = newQueue;
+    queue = [...newQueue];
+    execute();
   };
 
   const getTask: GetTask<T> = (f) => queue.find(f);
 
   const setTask: SetTask<T> = (task, i) => {
-    if (i === undefined) {
-      queue.push(task);
-    } else {
-      queue = addAtIndex(queue, task, i);
-    }
-
+    queue = i === undefined ? [...queue, task] : addAtIndex(queue, task, i);
     queue = queue.sort((a, b) => {
       if (a.priority !== undefined && b.priority !== undefined) {
         return b.priority - a.priority;
@@ -62,6 +62,8 @@ export const createQueue = <T extends QueueTask>({ executeTask }: QueueParams<T>
 
       return 0;
     });
+
+    execute();
   };
 
   return {
