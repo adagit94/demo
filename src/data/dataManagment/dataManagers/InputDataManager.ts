@@ -4,13 +4,11 @@ import { PrimitiveValue, RecordValue } from "types/CommonTypes";
 
 type DataItem = PrimitiveValue | RecordValue;
 
-type InputDataManagerState = DataSourceState;
+type InputDataManagerState<DataItem extends PrimitiveValue | RecordValue<string | number>> = DataSourceState<
+  DataItem[]
+>;
 
 type LoaderOptionals = Partial<{ search: string; selectedValues: DataItem[] }>;
-
-type LoaderReturn<DataItem extends PrimitiveValue | RecordValue<string | number>> = InputDataManagerState & {
-  data: DataItem | DataItem[];
-};
 
 abstract class InputDataManager<
   Settings extends PrimitiveInputDataManagerSettings | RecordInputDataManagerSettings,
@@ -19,12 +17,12 @@ abstract class InputDataManager<
   PagerState extends Record<string, unknown>,
   PagerAdvanceInfo extends Record<string, unknown>,
   Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
-  Loader extends (
-    pagerInfo: PagerAdvanceInfo,
-    currentData: Readonly<DataItem[]>,
-    optionals?: LoaderOptionals,
-  ) => LoaderReturn<DataItem> | Promise<LoaderReturn<DataItem>>,
-> implements IDataSource<DataItem[], InputDataManagerState>
+> implements
+    IDataSource<
+      DataItem[],
+      DataSourceState<DataItem[]>,
+      (pagerInfo: PagerAdvanceInfo, optionals?: LoaderOptionals) => DataSourceState<DataItem[]>
+    >
 {
   constructor(pager: Pager, loader: Loader, settings: Settings) {
     this.pager = pager;
