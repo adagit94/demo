@@ -16,9 +16,9 @@ export type SetData<T> = (data: T) => void;
 
 export type LoadData<T, U extends unknown[] = []> = VariadicFunction<T | Promise<T>, U>;
 
-export type FilterData<T, U> = (filter: T) => U | Promise<U>;
+export type FilterData<T, U extends unknown[] = []> = VariadicFunction<T | Promise<T>, U>
 
-export type DataSourceState<T> = { data: Readonly<T>; exhausted: boolean };
+export type DataSourceState<T> = { data: Readonly<T>; exhausted: boolean; totalCount?: number };
 
 export interface IPageCursor<T extends Record<string, unknown>, U extends Record<string, unknown>> {
   getState: GetState<T>;
@@ -31,7 +31,7 @@ export interface IDataLoader<T, U extends unknown[] = []> {
   load: LoadData<T, U>;
 }
 
-export interface IDataFilter<T, U> {
+export interface IDataFilter<T, U extends unknown[] = []> {
   filter: FilterData<T, U>;
 }
 
@@ -43,4 +43,4 @@ export interface IDataSource<T, U extends DataSourceState<T> = DataSourceState<T
   reset: Reset;
 }
 
-export interface IFilteredDataSource<T, U extends DataSourceState<T>, V, W> extends IDataSource<T, U>, IDataFilter<V, W> {}
+export interface IFilteredDataSource<T, U extends DataSourceState<T>, V, W extends unknown[] = []> extends IDataSource<T, U>, IDataFilter<V, W> {}

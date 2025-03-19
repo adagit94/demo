@@ -18,7 +18,11 @@ type InputDataManagerQueueTask = QueueTask & { handle: () => Promise<void> };
 
 type InputDataManagerState<DataItem extends PrimitiveValue | RecordValue> = DataSourceState<DataItem[]>;
 
-type LoaderOptionals = Partial<{ search: string; selectedValues: DataItem[] } & QueueTask>;
+type LoaderOptionals = Partial<{ search: string; selectedValues: DataItem[]; reqTotalCount: boolean } & QueueTask>;
+
+type DataInitOptionals = Pick<LoaderOptionals, "reqTotalCount">
+
+type FilterParams = [string, DataInitOptionals]
 
 abstract class InputDataManager<
   Settings extends PrimitiveInputDataManagerSettings | ObjectInputDataManagerSettings,
@@ -28,7 +32,7 @@ abstract class InputDataManager<
   PagerAdvanceInfo extends Record<string, unknown>,
   Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
   Loader extends IDataLoader<InputDataManagerState<DataItem>, [PagerAdvanceInfo, LoaderOptionals]>,
-> implements IFilteredDataSource<DataItem[], InputDataManagerState<DataItem>, string, void>
+> implements IFilteredDataSource<DataItem[], InputDataManagerState<DataItem>, void, FilterParams>
 {
   constructor(pager: Pager, loader: Loader, settings: Settings) {
     this.queue = createQueue({ executeTask: this.executeQueueTask });
@@ -103,15 +107,15 @@ abstract class InputDataManager<
     this.dataSource.setData(data);
   };
 
-  public init = () => {
+  public init = ({ reqTotalCount }: DataInitOptionals = {}) => {
     this.pager.reset();
-    this.loadData();
+    this.loadData({ reqTotalCount });
   };
 
   public filter = debounce(
-    (search: string) => {
+    (search: string, { reqTotalCount }: DataInitOptionals = {}) => {
       this.pager.reset();
-      this.loadData({ search });
+      this.loadData({ search, reqTotalCount });
     },
     250,
     { leading: false },
