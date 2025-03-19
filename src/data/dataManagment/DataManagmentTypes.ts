@@ -1,16 +1,18 @@
 import { ImmutableGetter, VariadicFunction } from "types/CommonTypes";
 
-type GetState<T extends Record<string, unknown>> = () => T;
+export type GetState<T extends Record<string, unknown>> = () => T;
+
+export type SetState<T extends Record<string, unknown>> = (newState: Partial<T> | ((state: T) => Partial<T>)) => T;
 
 type Advance<T extends Record<string, unknown>, U extends unknown[] = []> = VariadicFunction<T, U>;
 
 type Rollback = () => void;
 
-type Reset = () => void;
+export type Reset = () => void;
 
-type GetData<T> = ImmutableGetter<T>;
+export type GetData<T> = ImmutableGetter<T>;
 
-type SetData<T> = (data: T) => void;
+export type SetData<T> = (data: T) => void;
 
 export type LoadData<T, U extends unknown[] = []> = VariadicFunction<T | Promise<T>, U>;
 
@@ -35,6 +37,7 @@ export interface IDataFilter<T, U> {
 
 export interface IDataSource<T, U extends DataSourceState<T>> {
   getState: GetState<U>;
+  setState: SetState<U>;
   getData: GetData<T>;
   setData: SetData<T>;
   reset: Reset;
