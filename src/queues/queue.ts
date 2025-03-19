@@ -14,6 +14,7 @@ type GetQueue<T extends QueueTask> = () => T[];
 type SetQueue<T extends QueueTask> = (newQueue: T[]) => void;
 type GetTask<T extends QueueTask> = (f: (task: T) => boolean) => T | undefined;
 type SetTask<T extends QueueTask> = (task: T, i?: number) => void;
+type Reset = () => void;
 export type ExecuteTask<T extends QueueTask> = (task: T) => void | Promise<void>;
 
 export interface IQueue<T extends QueueTask> {
@@ -21,6 +22,7 @@ export interface IQueue<T extends QueueTask> {
   setQueue: SetQueue<T>;
   getTask: GetTask<T>;
   setTask: SetTask<T>;
+  reset: Reset
 }
 
 type QueueParams<T extends QueueTask> = {
@@ -41,15 +43,25 @@ export const createQueue = <T extends QueueTask>({ executeTask }: QueueParams<T>
 
     queue = queue.slice(1);
     taskInProgress = task;
-
     await executeTask(task);
     taskInProgress = undefined;
+
+    if (mode === QueueMode.Privileged && queue.length === 0) {
+      mode = QueueMode.Normal
+    }
+    
     execute();
   };
 
+  const reset = () => {
+    queue = []
+    mode = QueueMode.Normal
+  }
+  
   const getQueue: GetQueue<T> = () => [...queue];
 
   const setQueue: SetQueue<T> = (newQueue) => {
+    reset()
     queue = [...newQueue];
     execute();
   };
@@ -60,6 +72,7 @@ export const createQueue = <T extends QueueTask>({ executeTask }: QueueParams<T>
     if (mode === QueueMode.Privileged && !task.privileged) return;
 
     if (task.privileged) {
+      mode = QueueMode.Privileged
       queue = [task];
     } else {
       queue = i === undefined ? [...queue, task] : addAtIndex(queue, task, i);
@@ -83,5 +96,6 @@ export const createQueue = <T extends QueueTask>({ executeTask }: QueueParams<T>
     setQueue,
     getTask,
     setTask,
+    reset
   };
 };
