@@ -35,7 +35,7 @@ export interface IDataFilter<T, U> {
   filter: FilterData<T, U>;
 }
 
-export interface IDataSource<T, U extends DataSourceState<T>> {
+export interface IDataSource<T, U extends DataSourceState<T> = DataSourceState<T>> {
   getState: GetState<U>;
   setState: SetState<U>;
   getData: GetData<T>;

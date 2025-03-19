@@ -1,4 +1,12 @@
-import { DataSourceState, IDataLoader, IFilteredDataSource, IPageCursor } from "data/dataManagment/DataManagmentTypes";
+import {
+  DataSourceState,
+  IDataLoader,
+  IDataSource,
+  IFilteredDataSource,
+  IPageCursor,
+  SetState,
+} from "data/dataManagment/DataManagmentTypes";
+import { createDataSource } from "data/dataManagment/dataSources/dataSources";
 import { debounce, get, isEqual } from "lodash";
 import { createQueue, ExecuteTask, IQueue, QueueTask } from "queues/queue";
 import { PrimitiveValue } from "types/CommonTypes";
@@ -6,42 +14,44 @@ import { PrimitiveValue } from "types/CommonTypes";
 type RecordValue = Record<string | number, unknown>;
 type DataItem = PrimitiveValue | RecordValue;
 
-type InputDataSourceQueueTask = QueueTask & { handle: () => Promise<void> };
+type InputDataManagerQueueTask = QueueTask & { handle: () => Promise<void> };
 
-type InputDataSourceState<DataItem extends PrimitiveValue | RecordValue> = DataSourceState<DataItem[]>;
+type InputDataManagerState<DataItem extends PrimitiveValue | RecordValue> = DataSourceState<DataItem[]>;
 
 type LoaderOptionals = Partial<{ search: string; selectedValues: DataItem[] } & QueueTask>;
 
-abstract class InputDataSource<
-  Settings extends PrimitiveInputDataSourceSettings | ObjectInputDataSourceSettings,
+abstract class InputDataManager<
+  Settings extends PrimitiveInputDataManagerSettings | ObjectInputDataManagerSettings,
   DataItem extends PrimitiveValue | RecordValue,
   SelectedValue extends PrimitiveValue | RecordValue,
   PagerState extends Record<string, unknown>,
   PagerAdvanceInfo extends Record<string, unknown>,
   Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
-  Loader extends IDataLoader<InputDataSourceState<DataItem>, [PagerAdvanceInfo, LoaderOptionals]>,
-> implements IFilteredDataSource<DataItem[], InputDataSourceState<DataItem>, string, void>
+  Loader extends IDataLoader<InputDataManagerState<DataItem>, [PagerAdvanceInfo, LoaderOptionals]>,
+> implements IFilteredDataSource<DataItem[], InputDataManagerState<DataItem>, string, void>
 {
   constructor(pager: Pager, loader: Loader, settings: Settings) {
     this.queue = createQueue({ executeTask: this.executeQueueTask });
+    this.dataSource = createDataSource<DataItem[]>({ initState: this.initState });
     this.pager = pager;
     this.loader = loader;
     this.settings = settings;
   }
 
-  private queue: IQueue<InputDataSourceQueueTask>;
+  private queue: IQueue<InputDataManagerQueueTask>;
+  private dataSource: IDataSource<DataItem[]>;
   private pager: Pager;
   private loader: Loader;
-  private state: InputDataSourceState<DataItem> = { data: [], exhausted: false };
-  private data: DataItem[] = [];
   private selectedItems: DataItem[] = [];
   protected selectedValues: SelectedValue[] = [];
   protected settings: Settings;
 
   protected abstract getDataItemsForValues: () => DataItem[];
 
-  private executeQueueTask: ExecuteTask<InputDataSourceQueueTask> = async (task) => {
-    await task.handle()
+  private initState = () => ({ data: [], exhausted: false });
+
+  private executeQueueTask: ExecuteTask<InputDataManagerQueueTask> = async (task) => {
+    await task.handle();
   };
 
   private missingDataItemsForValues = () => {
@@ -63,12 +73,14 @@ abstract class InputDataSource<
         privileged: optionals.privileged,
         handle: async () => {
           try {
-            this.state = await this.loader.load(this.pager.advance(), optionals)
-            resolve(true)
+            const newState = await this.loader.load(this.pager.advance(), optionals);
+
+            this.dataSource.setState(newState);
+            resolve(true);
           } catch (err) {
             console.error(`Data load failed:`, err);
             this.pager.rollback();
-            resolve(false)
+            resolve(false);
           }
         },
       });
@@ -76,17 +88,19 @@ abstract class InputDataSource<
   };
 
   public getData = () => {
+    const baseData = this.dataSource.getData();
+
     // filter out selected items that are included in base data set and prepend only those that are missing
     const prependedSelectedItems = this.selectedItems.filter(
-      (selectedItem) => !this.data.some((item) => isEqual(item, selectedItem)),
+      (selectedItem) => !baseData.some((item) => isEqual(item, selectedItem)),
     );
 
-    return [...prependedSelectedItems, ...this.data];
+    return [...prependedSelectedItems, ...baseData];
   };
 
   public setData = (data: DataItem[]) => {
     this.pager.reset();
-    this.data = data;
+    this.dataSource.setData(data);
   };
 
   public init = () => {
@@ -116,23 +130,25 @@ abstract class InputDataSource<
     }
   }
 
-  public getState = () => ({ ...this.state });
+  public getState = () => this.dataSource.getState();
+
+  public setState: SetState<InputDataManagerState<DataItem>> = (newState) => this.dataSource.setState(newState);
 
   public reset = () => {
     this.pager.reset();
-    this.data = [];
+    this.dataSource.reset();
   };
 }
 
-type PrimitiveInputDataSourceSettings = Record<string, never>;
+type PrimitiveInputDataManagerSettings = Record<string, never>;
 
-export class PrimitiveInputDataSource<
+export class PrimitiveInputDataManager<
   PagerState extends Record<string, unknown>,
   PagerAdvanceInfo extends Record<string, unknown>,
   Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
   Loader extends IDataLoader<DataSourceState<PrimitiveValue[]>, [PagerAdvanceInfo, LoaderOptionals]>,
-> extends InputDataSource<
-  PrimitiveInputDataSourceSettings,
+> extends InputDataManager<
+  PrimitiveInputDataManagerSettings,
   PrimitiveValue,
   PrimitiveValue,
   PagerState,
@@ -154,17 +170,17 @@ export class PrimitiveInputDataSource<
   };
 }
 
-type ObjectInputDataSourceSettings = {
+type ObjectInputDataManagerSettings = {
   valueKey?: string;
 };
 
-export class ObjectInputDataSource<
+export class ObjectInputDataManager<
   PagerState extends Record<string, unknown>,
   PagerAdvanceInfo extends Record<string, unknown>,
   Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
   Loader extends IDataLoader<DataSourceState<RecordValue[]>, [PagerAdvanceInfo, LoaderOptionals]>,
-> extends InputDataSource<
-  ObjectInputDataSourceSettings,
+> extends InputDataManager<
+  ObjectInputDataManagerSettings,
   RecordValue,
   RecordValue | PrimitiveValue,
   PagerState,
