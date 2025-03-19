@@ -1,5 +1,10 @@
 import { addAtIndex } from "utils/sortingUtils";
 
+enum QueueMode {
+  Normal,
+  Privileged,
+}
+
 export type QueueTask = Partial<{
   priority: number;
   privileged: boolean;
@@ -9,9 +14,9 @@ type GetQueue<T extends QueueTask> = () => T[];
 type SetQueue<T extends QueueTask> = (newQueue: T[]) => void;
 type GetTask<T extends QueueTask> = (f: (task: T) => boolean) => T | undefined;
 type SetTask<T extends QueueTask> = (task: T, i?: number) => void;
-type ExecuteTask<T extends QueueTask> = (task: T) => void | Promise<void>;
+export type ExecuteTask<T extends QueueTask> = (task: T) => void | Promise<void>;
 
-export interface Queue<T extends QueueTask> {
+export interface IQueue<T extends QueueTask> {
   getQueue: GetQueue<T>;
   setQueue: SetQueue<T>;
   getTask: GetTask<T>;
@@ -22,8 +27,9 @@ type QueueParams<T extends QueueTask> = {
   executeTask: ExecuteTask<T>;
 };
 
-export const createQueue = <T extends QueueTask>({ executeTask }: QueueParams<T>): Queue<T> => {
+export const createQueue = <T extends QueueTask>({ executeTask }: QueueParams<T>): IQueue<T> => {
   let queue: T[] = [];
+  let mode: QueueMode = QueueMode.Normal as QueueMode;
   let taskInProgress: T | undefined;
 
   const execute = async () => {
@@ -51,17 +57,23 @@ export const createQueue = <T extends QueueTask>({ executeTask }: QueueParams<T>
   const getTask: GetTask<T> = (f) => queue.find(f);
 
   const setTask: SetTask<T> = (task, i) => {
-    queue = i === undefined ? [...queue, task] : addAtIndex(queue, task, i);
-    queue = queue.sort((a, b) => {
-      if (a.priority !== undefined && b.priority !== undefined) {
-        return b.priority - a.priority;
-      }
+    if (mode === QueueMode.Privileged && !task.privileged) return;
 
-      if (a.priority !== undefined) return -1;
-      if (b.priority !== undefined) return 1;
+    if (task.privileged) {
+      queue = [task];
+    } else {
+      queue = i === undefined ? [...queue, task] : addAtIndex(queue, task, i);
+      queue = queue.sort((a, b) => {
+        if (a.priority !== undefined && b.priority !== undefined) {
+          return b.priority - a.priority;
+        }
 
-      return 0;
-    });
+        if (a.priority !== undefined) return -1;
+        if (b.priority !== undefined) return 1;
+
+        return 0;
+      });
+    }
 
     execute();
   };

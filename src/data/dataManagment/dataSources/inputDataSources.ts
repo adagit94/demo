@@ -1,13 +1,16 @@
-import { DataSourceState, IDataLoader, IDataSource, IPageCursor } from "data/dataManagment/DataManagmentTypes";
+import { DataSourceState, IDataLoader, IFilteredDataSource, IPageCursor } from "data/dataManagment/DataManagmentTypes";
 import { debounce, get, isEqual } from "lodash";
+import { createQueue, ExecuteTask, IQueue, QueueTask } from "queues/queue";
 import { PrimitiveValue } from "types/CommonTypes";
 
 type RecordValue = Record<string | number, unknown>;
 type DataItem = PrimitiveValue | RecordValue;
 
-type InputDataManagerState<DataItem extends PrimitiveValue | RecordValue> = DataSourceState<DataItem[]>;
+type InputDataSourceQueueTask = QueueTask & { handle: () => Promise<void> };
 
-type LoaderOptionals = Partial<{ search: string; selectedValues: DataItem[] }>;
+type InputDataSourceState<DataItem extends PrimitiveValue | RecordValue> = DataSourceState<DataItem[]>;
+
+type LoaderOptionals = Partial<{ search: string; selectedValues: DataItem[] } & QueueTask>;
 
 abstract class InputDataSource<
   Settings extends PrimitiveInputDataSourceSettings | ObjectInputDataSourceSettings,
@@ -16,24 +19,30 @@ abstract class InputDataSource<
   PagerState extends Record<string, unknown>,
   PagerAdvanceInfo extends Record<string, unknown>,
   Pager extends IPageCursor<PagerState, PagerAdvanceInfo>,
-  Loader extends IDataLoader<DataSourceState<DataItem[]>, [PagerAdvanceInfo, LoaderOptionals]>,
-> implements IDataSource<DataItem[], DataSourceState<DataItem[]>>
+  Loader extends IDataLoader<InputDataSourceState<DataItem>, [PagerAdvanceInfo, LoaderOptionals]>,
+> implements IFilteredDataSource<DataItem[], InputDataSourceState<DataItem>, string, void>
 {
   constructor(pager: Pager, loader: Loader, settings: Settings) {
+    this.queue = createQueue({ executeTask: this.executeQueueTask });
     this.pager = pager;
     this.loader = loader;
     this.settings = settings;
   }
 
+  private queue: IQueue<InputDataSourceQueueTask>;
   private pager: Pager;
   private loader: Loader;
-  private state: InputDataManagerState<DataItem> = { data: [], exhausted: false, sufficientAmount: false };
+  private state: InputDataSourceState<DataItem> = { data: [], exhausted: false };
   private data: DataItem[] = [];
   private selectedItems: DataItem[] = [];
   protected selectedValues: SelectedValue[] = [];
   protected settings: Settings;
 
   protected abstract getDataItemsForValues: () => DataItem[];
+
+  private executeQueueTask: ExecuteTask<InputDataSourceQueueTask> = async (task) => {
+    await task.handle()
+  };
 
   private missingDataItemsForValues = () => {
     return this.selectedItems.length !== this.selectedValues.length;
@@ -47,21 +56,23 @@ abstract class InputDataSource<
     this.loadData({ selectedValues: this.selectedValues });
   };
 
-  private loadData = async (optionals?: LoaderOptionals) => {
-    try {
-      const { data, exhausted, sufficientAmount } = await this.loader.load(this.pager.advance(), this.getData(), optionals);
-
-      this.state = {
-        data: Array.isArray(data) ? data : [data],
-        exhausted,
-        sufficientAmount,
-      };
-
-      if (!sufficientAmount) this.loadData();
-    } catch (err) {
-      console.error(`Data load failed:`, err);
-      this.pager.rollback();
-    }
+  private loadData = async (optionals: LoaderOptionals = {}): Promise<boolean> => {
+    return new Promise((resolve) => {
+      this.queue.setTask({
+        priority: optionals.priority,
+        privileged: optionals.privileged,
+        handle: async () => {
+          try {
+            this.state = await this.loader.load(this.pager.advance(), optionals)
+            resolve(true)
+          } catch (err) {
+            console.error(`Data load failed:`, err);
+            this.pager.rollback();
+            resolve(false)
+          }
+        },
+      });
+    });
   };
 
   public getData = () => {
@@ -73,12 +84,17 @@ abstract class InputDataSource<
     return [...prependedSelectedItems, ...this.data];
   };
 
+  public setData = (data: DataItem[]) => {
+    this.pager.reset();
+    this.data = data;
+  };
+
   public init = () => {
     this.pager.reset();
     this.loadData();
   };
 
-  public search = debounce(
+  public filter = debounce(
     (search: string) => {
       this.pager.reset();
       this.loadData({ search });
@@ -101,6 +117,11 @@ abstract class InputDataSource<
   }
 
   public getState = () => ({ ...this.state });
+
+  public reset = () => {
+    this.pager.reset();
+    this.data = [];
+  };
 }
 
 type PrimitiveInputDataSourceSettings = Record<string, never>;

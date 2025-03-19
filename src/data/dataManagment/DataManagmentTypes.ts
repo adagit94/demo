@@ -10,13 +10,13 @@ type Reset = () => void;
 
 type GetData<T> = ImmutableGetter<T>;
 
-type SetData<T> = () => T;
+type SetData<T> = (data: T) => void;
 
 export type LoadData<T, U extends unknown[] = []> = VariadicFunction<T | Promise<T>, U>;
 
-export type FiltrData<T, U> = (filter: T) => U | Promise<U>;
+export type FilterData<T, U> = (filter: T) => U | Promise<U>;
 
-export type DataSourceState<T> = { data: Readonly<T>; sufficientAmount: boolean; exhausted: boolean };
+export type DataSourceState<T> = { data: Readonly<T>; exhausted: boolean };
 
 export interface IPageCursor<T extends Record<string, unknown>, U extends Record<string, unknown>> {
   getState: GetState<T>;
@@ -30,7 +30,7 @@ export interface IDataLoader<T, U extends unknown[] = []> {
 }
 
 export interface IDataFilter<T, U> {
-  filtr: FiltrData<T, U>;
+  filter: FilterData<T, U>;
 }
 
 export interface IDataSource<T, U extends DataSourceState<T>> {
