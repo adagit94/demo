@@ -4,7 +4,7 @@ type AdvanceInfo = { skip: number; take: number; merge: boolean };
 type PagerState = { step: number; skip: number; take: number };
 type PagerSettings = Partial<Pick<PagerState, "take">>;
 
-class Pager implements IPageCursor<PagerState, AdvanceInfo> {
+class OffsetPager implements IPageCursor<PagerState, AdvanceInfo> {
   constructor(settings: PagerSettings = {}) {
     this.settings = settings;
     this.state = this.initState();
@@ -40,4 +40,4 @@ class Pager implements IPageCursor<PagerState, AdvanceInfo> {
   public getState = () => ({ ...this.state });
 }
 
-export default Pager;
+export default OffsetPager;
