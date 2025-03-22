@@ -1,48 +1,40 @@
 import {
-  DataSourceState,
   GetData,
-  GetState,
-  IDataSource,
+  IDataFilter,
   SetData,
-  SetState,
 } from "data/dataManagment/DataManagmentTypes";
+import { createState, InitState, IState } from "states/state";
+
+export type DataSourceState<T> = { data: Readonly<T>; exhausted: boolean };
 
 type CreateDataSourceParams<T, U extends DataSourceState<T>> = {
-  initState: () => U;
+  initState: InitState<U>;
 };
+
+export interface IDataSource<T, U extends DataSourceState<T> = DataSourceState<T>> extends IState<U> {
+  getData: GetData<T>;
+  setData: SetData<T>;
+  reset: () => void;
+}
 
 export const createDataSource = <T, U extends DataSourceState<T> = DataSourceState<T>>({
   initState,
 }: CreateDataSourceParams<T, U>): IDataSource<T, U> => {
-  let state: U = initState();
+  let state = createState({ initState });
 
-  const getState: GetState<U> = () => ({ ...state });
-
-  const setState: SetState<U> = (newState) => {
-    if (typeof newState === "function") {
-      state = { ...state, ...newState(state) };
-    } else {
-      state = { ...state, ...newState };
-    }
-
-    return state;
-  };
-
-  const getData: GetData<T> = () => state.data;
+  const getData: GetData<T> = () => state.getState().data;
 
   const setData: SetData<T> = (data) => {
-    state = { ...state, data };
-  };
-
-  const reset = () => {
-    state = initState();
+    state.setState((s) => ({ ...s, data }));
   };
 
   return {
-    getState,
-    setState,
+    ...state,
     getData,
     setData,
-    reset,
   };
 };
+
+export interface IFilteredDataSource<T, U extends DataSourceState<T>, V, W extends unknown[] = []>
+  extends IDataSource<T, U>,
+    IDataFilter<V, W> {}

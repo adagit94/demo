@@ -1,15 +1,11 @@
 import {
-  DataSourceState,
-  GetState,
   IDataLoader,
-  IDataSource,
-  IFilteredDataSource,
   IPageCursor,
-  SetState,
 } from "data/dataManagment/DataManagmentTypes";
-import { createDataSource } from "data/dataManagment/dataSources/dataSources";
+import { createDataSource, DataSourceState, IDataSource, IFilteredDataSource } from "data/dataManagment/dataSources/dataSources";
 import { debounce, get, isEqual } from "lodash";
 import { createQueue, ExecuteTask, IQueue, QueueTask } from "queues/queue";
+import { GetState, SetState } from "states/state";
 import { PrimitiveValue } from "types/CommonTypes";
 
 type RecordValue = Record<string | number, unknown>;
@@ -41,7 +37,7 @@ abstract class InputDataManager<
 {
   constructor(pager: Pager, loader: Loader, settings: Settings) {
     this.queue = createQueue({ executeTask: this.executeQueueTask });
-    this.dataSource = createDataSource<DataItem[]>({ initState: this.initState });
+    this.dataSource = createDataSource<DataItem[]>({ initState: () => ({ data: [], exhausted: false }) });
     this.pager = pager;
     this.loader = loader;
     this.settings = settings;
@@ -56,8 +52,6 @@ abstract class InputDataManager<
   protected settings: Settings;
 
   protected abstract getDataItemsForValues: () => DataItem[];
-
-  private initState = () => ({ data: [], exhausted: false });
 
   private executeQueueTask: ExecuteTask<InputDataManagerQueueTask> = async (task) => {
     await task.handle();
