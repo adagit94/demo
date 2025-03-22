@@ -1,43 +1,47 @@
-import { IPageCursor } from "data/dataManagment/DataManagmentTypes";
+import { IPageCursor, PagerState, SetState } from "data/dataManagment/DataManagmentTypes";
 
-type AdvanceInfo = { skip: number; take: number; merge: boolean };
-type PagerState = { step: number; skip: number; take: number };
-type PagerSettings = Partial<Pick<PagerState, "take">>;
+type OffsetPagerState = PagerState & { step: number; take: number };
+type OffsetPagerAdvanceInfo = { skip: number; take: number; merge: boolean };
+type InitOffsetPagerState = () => OffsetPagerState;
+type OffsetPagerSettings = Pick<OffsetPagerState, "take">;
 
-class OffsetPager implements IPageCursor<PagerState, AdvanceInfo> {
-  constructor(settings: PagerSettings = {}) {
+class OffsetPager implements IPageCursor<OffsetPagerState, OffsetPagerAdvanceInfo> {
+  static exahausted = (lastBatchCount: number, take: number) => lastBatchCount === 0 || lastBatchCount % take !== 0
+  
+  constructor(settings: OffsetPagerSettings, initState?: InitOffsetPagerState) {
     this.settings = settings;
+    this.initState = initState ?? (() => ({ step: 0, take: this.settings.take }));
     this.state = this.initState();
   }
 
-  private settings: PagerSettings;
-  private state: PagerState;
-  private prevState: PagerState | undefined;
+  private settings: OffsetPagerSettings;
+  private state: OffsetPagerState;
+  private initState: InitOffsetPagerState;
 
-  private initState = () => ({ step: 0, skip: 0, take: this.settings.take ?? 0 });
+  public getState = () => ({ ...this.state });
+
+  public setState: SetState<OffsetPagerState> = (newState) =>
+    (this.state = { ...this.state, ...(typeof newState === "function" ? newState(this.state) : newState) });
 
   public advance = ({ steps = 1 } = {}) => {
-    this.prevState = this.state;
-    this.state = {
-      ...this.state,
-      skip: this.state.take * this.state.step,
-      step: this.state.step + steps,
+    const skip = this.state.take * this.state.step;
+    const step = this.state.step + steps;
+
+    return {
+      skip,
+      take: this.state.take * steps,
+      merge: skip > 0,
+      close: (successfull: boolean) => {
+        if (successfull) {
+          this.setState({ step });
+        }
+      },
     };
-
-    return { skip: this.state.skip, take: this.state.take * steps, merge: this.state.skip > 0 };
-  };
-
-  public rollback = () => {
-    this.state = this.prevState ?? this.state;
-    this.prevState = undefined;
   };
 
   public reset = () => {
-    this.prevState = undefined;
     this.state = this.initState();
   };
-
-  public getState = () => ({ ...this.state });
 }
 
 export default OffsetPager;
